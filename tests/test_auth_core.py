@@ -1,7 +1,12 @@
+import hashlib
+import hmac
+import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from urllib.parse import urlencode
 
 # Import the API with isolated local state. No real credentials or network calls.
 _BOOTSTRAP_DIR = tempfile.TemporaryDirectory(prefix="alfadent-auth-bootstrap-")
@@ -120,6 +125,46 @@ class AuthCoreTests(unittest.TestCase):
                     headers={"X-Internal-Auth": "unit-test-internal-secret"},
                 ),
             )
+        self.assertEqual(caught.exception.status_code, 401)
+
+    def signed_init_data(self, token, platform="telegram", auth_date=None):
+        fields = {
+            "auth_date": str(auth_date if auth_date is not None else int(time.time())),
+            "user": json.dumps(
+                {"id": 123456, "first_name": "Unit Test"},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        }
+        check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
+        secret_key = hmac.new(b"WebAppData", token.encode("utf-8"), hashlib.sha256).digest()
+        fields["hash"] = hmac.new(secret_key, check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+        return urlencode(fields)
+
+    def test_telegram_init_data_signature(self):
+        signed = self.signed_init_data(api.BOT_TOKEN)
+        user = api.validated_telegram_user(signed)
+        self.assertEqual(user["id"], 123456)
+
+        tampered = signed.replace("Unit+Test", "Forged+User")
+        with self.assertRaises(HTTPException) as caught:
+            api.validated_telegram_user(tampered)
+        self.assertEqual(caught.exception.status_code, 401)
+
+    def test_max_init_data_signature(self):
+        signed = self.signed_init_data(api.MAX_BOT_TOKEN, platform="max")
+        user = api.validated_max_user(signed)
+        self.assertEqual(user["id"], 123456)
+
+        tampered = signed.replace("Unit+Test", "Forged+User")
+        with self.assertRaises(HTTPException) as caught:
+            api.validated_max_user(tampered)
+        self.assertEqual(caught.exception.status_code, 401)
+
+    def test_stale_init_data_is_rejected(self):
+        stale = self.signed_init_data(api.BOT_TOKEN, auth_date=int(time.time()) - 7200)
+        with self.assertRaises(HTTPException) as caught:
+            api.validated_telegram_user(stale)
         self.assertEqual(caught.exception.status_code, 401)
 
 
