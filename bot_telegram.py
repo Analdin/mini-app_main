@@ -524,6 +524,27 @@ async def send_admin_fallback(context: ContextTypes.DEFAULT_TYPE, subject: str, 
 
 
 # ---------------- AUTH AND MESSAGE HANDLING ----------------
+def validate_auth_session(user: Dict[str, Any]) -> bool:
+    token = str(user.get("access_token") or "")
+    if not token:
+        user["auth"] = False
+        return False
+    try:
+        response = requests.get(
+            f"{AUTH_API_URL}/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        valid = response.ok and bool(response.json().get("authorized"))
+    except (requests.RequestException, ValueError):
+        logger.exception("Не удалось проверить серверную сессию Telegram")
+        return False
+    if not valid:
+        user["auth"] = False
+        user.pop("access_token", None)
+    return valid
+
+
 async def process_phone(user_id: int, raw_phone: str, context: ContextTypes.DEFAULT_TYPE):
     phone = normalize_phone(raw_phone)
     if not phone:
@@ -534,7 +555,10 @@ async def process_phone(user_id: int, raw_phone: str, context: ContextTypes.DEFA
     try:
         response = requests.post(f"{AUTH_API_URL}/api/auth/register", json={"platform":"telegram","phone":normalized,"name":user_sessions[user_id].get("name","")}, headers={"X-Internal-Auth":AUTH_API_SECRET}, timeout=10)
         if response.status_code == 200:
-            data = response.json(); user_sessions[user_id]["auth"] = True; user_sessions[user_id]["step"] = None
+            data = response.json()
+            user_sessions[user_id]["access_token"] = data["access_token"]
+            user_sessions[user_id]["auth"] = True
+            user_sessions[user_id]["step"] = None
             await send(user_id, "✅ Аккаунт создан. Ваш постоянный пароль (сохраните его, повторно он не будет показан):\n\n<code>"+esc(data["password"])+"</code>\n\nНе передавайте пароль другим людям.", context)
             await send_main_menu(user_id, context); return
         if response.status_code == 409:
@@ -551,7 +575,9 @@ async def process_password(user_id: int, password: str, context: ContextTypes.DE
         response = requests.post(f"{AUTH_API_URL}/api/auth/login", json={"platform":"telegram","phone":phone,"password":password}, headers={"X-Internal-Auth":AUTH_API_SECRET}, timeout=10)
         data=response.json()
         if response.ok and data.get("authorized"):
-            user_sessions[user_id]["auth"] = True; user_sessions[user_id]["step"] = None
+            user_sessions[user_id]["access_token"] = data["access_token"]
+            user_sessions[user_id]["auth"] = True
+            user_sessions[user_id]["step"] = None
             await send(user_id, "✅ Вход выполнен.", context); await send_main_menu(user_id, context)
         else:
             await send(user_id, data.get("detail", "Неверный пароль."), context)
@@ -567,7 +593,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.args and context.args[0].startswith("ref_"):
         user["referrer_id"] = context.args[0][4:]
         logger.info("Referral start: user_id=%s referrer=%s", tg_user.id, user["referrer_id"])
-    if user.get("auth"):
+    if user.get("auth") and validate_auth_session(user):
         await send_main_menu(tg_user.id, context)
     else:
         await send(tg_user.id,
@@ -602,8 +628,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await process_phone(user_id, text, context); return
     if state == "waiting_password":
         await process_password(user_id, text, context); return
-    if not user.get("auth"):
-        await send(user_id, "Для продолжения нажмите /start и пройдите авторизацию.", context); return
+    if not user.get("auth") or not validate_auth_session(user):
+        await send(user_id, "Сессия завершена. Нажмите /start и войдите по телефону и постоянному паролю.", context); return
     if state == "waiting_support":
         result = create_support_task(user_id, "Вопрос пациента", text, priority=1)
         task_id = result.get("result", {}).get("task", {}).get("id")
@@ -628,8 +654,8 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
     user_id = query.from_user.id
     user = session_for(user_id, query.from_user.first_name or "Пациент")
     data = query.data or ""
-    if not user.get("auth"):
-        await send(user_id, "Для продолжения нажмите /start и пройдите авторизацию.", context)
+    if not user.get("auth") or not validate_auth_session(user):
+        await send(user_id, "Сессия завершена. Нажмите /start и войдите по телефону и постоянному паролю.", context)
         return
 
     if data == "webapp_help":
