@@ -52,11 +52,11 @@ sudo apt install -y git python3 python3-venv python3-pip nginx
 Приватные репозитории клонируйте по SSH-ключу, который имеет read-доступ. Не вставляйте GitHub PAT в URL команды: он попадёт в историю shell.
 
 ```bash
-sudo -u alfadent git clone --branch release/alfadent-vps-final git@github.com:Analdin/mini-app_main.git /opt/alfadent/mini-app_main
-sudo -u alfadent git clone --branch release/alfadent-vps-final git@github.com:Analdin/alfa-dent_max.git /opt/alfadent/alfa-dent_max
+sudo -u alfadent git clone --branch main git@github.com:Analdin/mini-app_main.git /opt/alfadent/mini-app_main
+sudo -u alfadent git clone --branch main git@github.com:Analdin/alfa-dent_max.git /opt/alfadent/alfa-dent_max
 ```
 
-После проверки и принятия pull request ветки можно заменить на `main`.
+Оба PR уже объединены в основные ветки `main`; для VPS используйте `main`.
 
 ## 4. Создать виртуальные окружения
 
@@ -91,6 +91,8 @@ sudo nano /etc/alfadent/alfadent.env
 - `WEBAPP_URL` и `MAX_MINIAPP_LINK` — один и тот же публичный HTTPS URL `https://ВАШ_ДОМЕН/miniapp.html`;
 - `PROMOTIONS_URL` — `https://ВАШ_ДОМЕН/assets/promotions.json`;
 - `TELEGRAM_PROXY` — только при необходимости, в полном формате SOCKS5/HTTPS-прокси.
+
+Для создания случайных значений непосредственно на VPS можно выполнить `openssl rand -hex 32` дважды и использовать первое значение как `INTERNAL_AUTH_SECRET`, второе как `MAX_WEBHOOK_SECRET`. Не присылайте эти значения в чат и не храните их в Git.
 
 В `AUTH_DB_PATH` используется единый файл `/var/lib/alfadent/auth.sqlite3`. Не задавайте для MAX и Telegram разные значения. Файл базы создаётся API автоматически.
 
