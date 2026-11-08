@@ -28,7 +28,7 @@ jobs:
           import re
           from pathlib import Path
           html = Path("web/miniapp.html").read_text(encoding="utf-8")
-          scripts = re.findall(r"<script(?![^>]*\\bsrc=)[^>]*>(.*?)</script>", html, flags=re.I | re.S)
+          scripts = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", html, flags=re.I | re.S)
           if not scripts:
               raise SystemExit("No inline script was found in web/miniapp.html")
           for i, script in enumerate(scripts):
