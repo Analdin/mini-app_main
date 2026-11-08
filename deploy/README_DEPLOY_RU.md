@@ -39,7 +39,7 @@ sudo systemctl status alfadent-telegram alfadent-max --no-pager
 
 ```bash
 sudo adduser --system --group --home /opt/alfadent alfadent
-sudo mkdir -p /opt/alfadent /var/lib/alfadent/telegram /etc/alfadent
+sudo mkdir -p /opt/alfadent /var/lib/alfadent/telegram /var/lib/alfadent/max /etc/alfadent
 sudo chown -R alfadent:alfadent /opt/alfadent /var/lib/alfadent
 sudo chmod 750 /var/lib/alfadent
 sudo chmod 750 /etc/alfadent
@@ -127,6 +127,8 @@ sudo systemctl status alfadent-telegram alfadent-max --no-pager
    ```
 4. После получения сертификата замените bootstrap-конфигурацию содержимым `deploy/nginx-https.conf`, подставьте домен и проверьте `sudo nginx -t`.
 
+На Nginx 1.24 используется форма `listen 443 ssl http2;`. В конфигурации API Nginx явно удаляет входящий от внешнего клиента заголовок `X-Internal-Auth`; этот заголовок используется только локальными процессами ботов при обращении прямо к `127.0.0.1:8001`.
+
 Nginx проксирует `/max/` на локальный MAX webhook. Настройте webhook в кабинете MAX на `https://ВАШ_ДОМЕН/max/webhook` и передайте секрет способом, который позволяет кабинет MAX. Приложение принимает стандартный заголовок `X-Max-Bot-Api-Secret`; секрет в URL не рекомендуется, поскольку URL может попадать в логи.
 
 ## 8. Проверить
@@ -154,4 +156,4 @@ sudo journalctl -u alfadent-max -n 100 --no-pager
 
 ## Обслуживание
 
-Ежедневно делайте резервную копию `/var/lib/alfadent` и храните её отдельно от VPS. Не делайте публичный доступ к SQLite, `.env`, логам, резервным копиям и каталогу `data/`. После обновления выполняйте `git pull`, установку изменившихся зависимостей и перезапуск только затронутых сервисов.
+Ежедневно делайте резервную копию `/var/lib/alfadent` и храните её отдельно от VPS. В том числе сохраняйте каталог MAX `/var/lib/alfadent/max`. Не делайте публичный доступ к SQLite, `.env`, логам, резервным копиям и каталогу `data/`. После обновления выполняйте `git pull`, установку изменившихся зависимостей и перезапуск только затронутых сервисов.
