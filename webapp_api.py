@@ -95,9 +95,13 @@ class AuthBody(BaseModel):
 
 def _auth_identity(body: AuthBody, request: Request) -> tuple[str, str]:
     # The public Mini App must supply a valid Telegram/MAX launch signature.
-    # Bot calls are allowed only over the private local API with the shared secret.
+    # Internal bot calls are permitted only from the same host and with a secret.
     supplied = request.headers.get("X-Internal-Auth", "")
-    if INTERNAL_AUTH_SECRET and hmac.compare_digest(supplied, INTERNAL_AUTH_SECRET):
+    remote_ip = request.client.host if request.client else ""
+    is_loopback = remote_ip in {"127.0.0.1", "::1", "localhost"}
+    if supplied:
+        if not (INTERNAL_AUTH_SECRET and is_loopback and hmac.compare_digest(supplied, INTERNAL_AUTH_SECRET)):
+            raise HTTPException(status_code=401, detail="Внутренний доступ к авторизации запрещён.")
         return (body.platform or "bot").lower(), "server-bot"
     platform = (body.platform or "telegram").lower()
     if platform == "telegram":
@@ -164,6 +168,31 @@ def _require_access(token: str) -> str:
     if not row:
         raise HTTPException(status_code=401, detail="Сессия истекла. Войдите повторно.")
     return row["phone"]
+
+def _bearer_token(request: Request) -> str:
+    value = request.headers.get("Authorization", "")
+    scheme, _, token = value.partition(" ")
+    return token.strip() if scheme.lower() == "bearer" else ""
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    phone = _require_access(_bearer_token(request))
+    with _auth_db() as conn:
+        row = conn.execute("SELECT display_name FROM patient_accounts WHERE phone=?", (phone,)).fetchone()
+    return {"ok": True, "authorized": True, "phone": phone, "name": row["display_name"] if row else ""}
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    token = _bearer_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Сессия не найдена.")
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with _auth_db() as conn:
+        cursor = conn.execute("DELETE FROM patient_sessions WHERE token_hash=?", (token_hash,))
+        conn.commit()
+    return {"ok": True, "logged_out": cursor.rowcount > 0}
 
 class RequestBody(BaseModel):
     platform: str = Field(default="telegram", max_length=20)
