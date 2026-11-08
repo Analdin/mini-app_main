@@ -1,0 +1,22 @@
+[Unit]
+Description=AlfaDent MAX webhook bot
+After=network-online.target alfadent-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alfadent
+Group=alfadent
+WorkingDirectory=/opt/alfadent/alfa-dent_max/max_bot
+EnvironmentFile=/etc/alfadent/alfadent.env
+Environment=AUTH_API_URL=http://127.0.0.1:8001
+Environment=MAX_DATA_DIR=/var/lib/alfadent/max
+ExecStart=/opt/alfadent/venv-max/bin/python max_bot.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
