@@ -94,16 +94,19 @@ class AuthBody(BaseModel):
     name: str = Field(default="", max_length=100)
 
 def _auth_identity(body: AuthBody, request: Request) -> tuple[str, str]:
-    # Bot-to-server calls are accepted only with a separately configured secret.
+    # The public Mini App must supply a valid Telegram/MAX launch signature.
+    # Bot calls are allowed only over the private local API with the shared secret.
     supplied = request.headers.get("X-Internal-Auth", "")
     if INTERNAL_AUTH_SECRET and hmac.compare_digest(supplied, INTERNAL_AUTH_SECRET):
         return (body.platform or "bot").lower(), "server-bot"
     platform = (body.platform or "telegram").lower()
-    if platform == "telegram": user = validated_telegram_user(body.initData)
-    elif platform == "max": user = validated_max_user(body.initData)
-    else: raise HTTPException(status_code=401, detail="Не удалось проверить платформу запуска.")
+    if platform == "telegram":
+        user = validated_telegram_user(body.initData)
+    elif platform == "max":
+        user = validated_max_user(body.initData)
+    else:
+        raise HTTPException(status_code=401, detail="Не удалось проверить платформу запуска.")
     return platform, str(user["id"])
-
 @app.post("/api/auth/register")
 def auth_register(body: AuthBody, request: Request):
     _auth_identity(body, request)
