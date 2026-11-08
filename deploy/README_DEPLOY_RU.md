@@ -39,7 +39,7 @@ sudo find /opt /var/lib -type f \( -name "auth.sqlite3" -o -name "max_bot.sqlite
 - если есть `pending_requests.json` у Telegram-бота, сохраните его в `/var/lib/alfadent/telegram/pending_requests.json`; если файл относится к MAX-боту, сохраните его в `/var/lib/alfadent/max/pending_requests.json`;
 - после копирования выставьте владельца `alfadent:alfadent` и проверьте наличие файлов.
 
-Пример копирования — замените `ФАКТИЧЕСКИЙ_ПУТЬ` на путь, который вернул `find`:
+Пример копирования — замените `/ПОЛНЫЙ/ПУТЬ/` на каталог, который вернул `find`. Выполняйте команды только для тех файлов, которые действительно существуют:
 ```bash
 sudo cp -a /ПОЛНЫЙ/ПУТЬ/auth.sqlite3 /var/lib/alfadent/auth.sqlite3
 sudo cp -a /ПОЛНЫЙ/ПУТЬ/max_bot.sqlite3 /var/lib/alfadent/max/max_bot.sqlite3
