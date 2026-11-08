@@ -146,7 +146,7 @@ class AuthCoreTests(unittest.TestCase):
         user = api.validated_telegram_user(signed)
         self.assertEqual(user["id"], 123456)
 
-        tampered = signed.replace("Unit+Test", "Forged+User")
+        tampered = signed.replace("123456", "654321")
         with self.assertRaises(HTTPException) as caught:
             api.validated_telegram_user(tampered)
         self.assertEqual(caught.exception.status_code, 401)
@@ -156,7 +156,7 @@ class AuthCoreTests(unittest.TestCase):
         user = api.validated_max_user(signed)
         self.assertEqual(user["id"], 123456)
 
-        tampered = signed.replace("Unit+Test", "Forged+User")
+        tampered = signed.replace("123456", "654321")
         with self.assertRaises(HTTPException) as caught:
             api.validated_max_user(tampered)
         self.assertEqual(caught.exception.status_code, 401)
