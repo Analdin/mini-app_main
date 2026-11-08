@@ -391,9 +391,13 @@ async def show_promotions(user_id: int, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_reviews(user_id: int, context: ContextTypes.DEFAULT_TYPE):
     await send(user_id,
-        "<b>Отзывы о клинике</b> ⭐\n\nВы можете открыть страницу клиники на Яндекс Картах. "
-        "Ссылки на 2ГИС и ПроДокторов необходимо подтвердить у заказчика.", context, keyboard([
-            [("📍 Яндекс Карты", "open_map")], [("💬 Уточнить другие площадки", "support")], [("⬅️ В главное меню", "back_menu")]
+        "<b>Отзывы о клинике</b> ⭐\n\nОткройте отзывы на официальном сайте клиники или на внешних площадках. "
+        "Ссылки ведут на страницы «Альфа-Дент» в Сочи.", context, keyboard([
+            [("🌐 Официальные отзывы клиники", "url", "https://alfadentstom.ru/reviews/")],
+            [("⭐ Яндекс Карты", "url", YANDEX_MAPS_URL)],
+            [("⭐ ПроДокторов", "url", "https://prodoctorov.ru/sochi/lpu/56511-stomatologiya-alfa-dent/")],
+            [("⭐ 2ГИС", "url", "https://2gis.ru/sochi/firm/70000001006981643")],
+            [("⬅️ В главное меню", "back_menu")]
         ]))
 
 
