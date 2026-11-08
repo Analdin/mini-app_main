@@ -6,7 +6,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 # Import the API with isolated local state. No real credentials or network calls.
 _BOOTSTRAP_DIR = tempfile.TemporaryDirectory(prefix="alfadent-auth-bootstrap-")
@@ -139,7 +139,7 @@ class AuthCoreTests(unittest.TestCase):
         check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
         secret_key = hmac.new(b"WebAppData", token.encode("utf-8"), hashlib.sha256).digest()
         fields["hash"] = hmac.new(secret_key, check_string.encode("utf-8"), hashlib.sha256).hexdigest()
-        return urlencode(fields)
+        return urlencode(fields, quote_via=quote)
 
     def test_telegram_init_data_signature(self):
         signed = self.signed_init_data(api.BOT_TOKEN)
