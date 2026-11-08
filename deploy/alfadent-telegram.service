@@ -1,0 +1,22 @@
+[Unit]
+Description=AlfaDent Telegram bot
+After=network-online.target alfadent-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alfadent
+Group=alfadent
+WorkingDirectory=/opt/alfadent/mini-app_main
+EnvironmentFile=/etc/alfadent/alfadent.env
+Environment=AUTH_DB_PATH=/var/lib/alfadent/auth.sqlite3
+Environment=BOT_DATA_DIR=/var/lib/alfadent/telegram
+ExecStart=/opt/alfadent/venv-app/bin/python bot_telegram.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
