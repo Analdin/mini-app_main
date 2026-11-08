@@ -30,21 +30,22 @@ Render после переключения больше не нужен. Реп�
 
 Найдите фактическое расположение существующих баз (пути могут отличаться):
 ```bash
-sudo find /opt /var/lib -type f \\( -name "auth.sqlite3" -o -name "max_bot.sqlite3" -o -name "pending_requests.json" \\) -print
+sudo find /opt /var/lib -type f \( -name "auth.sqlite3" -o -name "max_bot.sqlite3" -o -name "pending_requests.json" \) -print
 ```
 
 После штатной остановки старых процессов и до запуска новых сервисов:
 - если найдена действующая `auth.sqlite3`, скопируйте её в `/var/lib/alfadent/auth.sqlite3` (только если целевой файл ещё не создан);
 - если найдена база MAX `max_bot.sqlite3`, скопируйте её в `/var/lib/alfadent/max/max_bot.sqlite3`;
-- если есть `pending_requests.json` у Telegram-бота, сохраните его в `/var/lib/alfadent/telegram/pending_requests.json`;
+- если есть `pending_requests.json` у Telegram-бота, сохраните его в `/var/lib/alfadent/telegram/pending_requests.json`; если файл относится к MAX-боту, сохраните его в `/var/lib/alfadent/max/pending_requests.json`;
 - после копирования выставьте владельца `alfadent:alfadent` и проверьте наличие файлов.
 
 Пример копирования — замените `ФАКТИЧЕСКИЙ_ПУТЬ` на путь, который вернул `find`:
 ```bash
-sudo cp -a ФАКТИЧЕСКИЙ_ПУТЬ/auth.sqlite3 /var/lib/alfadent/auth.sqlite3
-sudo cp -a ФАКТИЧЕСКИЙ_ПУТЬ/max_bot.sqlite3 /var/lib/alfadent/max/max_bot.sqlite3
-sudo cp -a ФАКТИЧЕСКИЙ_ПУТЬ/pending_requests.json /var/lib/alfadent/telegram/pending_requests.json
+sudo cp -a /ПОЛНЫЙ/ПУТЬ/auth.sqlite3 /var/lib/alfadent/auth.sqlite3
+sudo cp -a /ПОЛНЫЙ/ПУТЬ/max_bot.sqlite3 /var/lib/alfadent/max/max_bot.sqlite3
+sudo cp -a /ПОЛНЫЙ/ПУТЬ/pending_requests.json /var/lib/alfadent/telegram/pending_requests.json
 sudo chown -R alfadent:alfadent /var/lib/alfadent
+sudo chmod 600 /var/lib/alfadent/auth.sqlite3 /var/lib/alfadent/max/max_bot.sqlite3
 ```
 Копируйте только реально существующие файлы; не выполняйте команды с неподтверждёнными путями. Если Render не имел постоянного диска и база не сохранилась, её невозможно восстановить из репозитория — пользователям потребуется создать/восстановить аккаунты отдельно.
 
