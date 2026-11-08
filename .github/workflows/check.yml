@@ -1,0 +1,38 @@
+name: Python and Mini App checks
+
+on:
+  push:
+    branches: [main, release/alfadent-vps-final]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+      - run: python -m compileall -q bot_telegram.py webapp_api.py
+      - run: python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check inline Mini App JavaScript
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("web/miniapp.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?![^>]*\\bsrc=)[^>]*>(.*?)</script>", html, flags=re.I | re.S)
+          if not scripts:
+              raise SystemExit("No inline script was found in web/miniapp.html")
+          for i, script in enumerate(scripts):
+              Path(f"/tmp/miniapp-{i}.js").write_text(script, encoding="utf-8")
+          print(f"Extracted {len(scripts)} inline script(s)")
+          PY
+          for js in /tmp/miniapp-*.js; do node --check "$js"; done
