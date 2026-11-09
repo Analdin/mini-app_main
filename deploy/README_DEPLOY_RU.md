@@ -1,89 +1,117 @@
 # Развёртывание AlfaDent на собственном VPS (Ubuntu/Debian)
 
+## Важно: конфигурация без `.env`
+
+Проект **не использует `.env` и `EnvironmentFile`**. Все настройки, включая действующие токены, Bitrix24 webhook, прокси и общий секрет API, находятся в отдельном файле Python `alfadent_config.py` из приватного репозитория `Analdin/alfadent-miniapp`.
+
+Не копируйте этот файл в публичный `mini-app_main` или в другие публичные репозитории. Не публикуйте его в issue, Pull Request, логах или сообщениях.
+
+Существующие токены и Bitrix24 webhook восстановлены из сохранённых приватных исходников. **Реальную действительность токенов на стороне Telegram/MAX/Bitrix можно подтвердить только пробным запуском с API сервисов.** Значение отдельного MAX webhook secret в сохранённых исходниках отсутствовало; оно оставлено пустым, а прежнее поведение MAX-процессора webhook (без обязательной проверки секрета) сохранено. Настройки webhook в кабинете MAX этой инструкцией не меняются.
+
 ## Архитектура
 
-На одном VPS работают три отдельных процесса:
-
-| Сервис | Проект | Локальный адрес |
+| Сервис | Исходники | Локальный адрес |
 |---|---|---|
-| Mini App + FastAPI | `Analdin/mini-app_main` | `127.0.0.1:8001` |
-| Telegram-бот | `Analdin/mini-app_main` | polling через Telegram API |
-| MAX-бот/webhook | `Analdin/alfa-dent_max` | `127.0.0.1:5000` |
+| Mini App + FastAPI API | `Analdin/mini-app_main` | `127.0.0.1:8001` |
+| Telegram-бот | `Analdin/mini-app_main` | Telegram polling |
+| MAX-бот | `Analdin/alfa-dent_max` | `127.0.0.1:5000` |
 
-Nginx принимает HTTPS: обычные запросы отправляет в FastAPI, запросы с префиксом `/max/` — в MAX-бот. Оба бота обращаются к одному API авторизации и одной базе `AUTH_DB_PATH`.
+Все три процесса используют один приватный Python-модуль `alfadent_config.py`, одну базу авторизации `/var/lib/alfadent/auth.sqlite3` и общий внутренний секрет. Nginx публикует Mini App/API и webhook MAX.
 
-Render после переключения больше не нужен. Репозиторий `alfadent-miniapp` не используйте как второй API-сервис: это старая копия.
+Репозиторий `Analdin/alfadent-miniapp` содержит старую копию исходников, но в текущей схеме используется только для хранения приватного файла `alfadent_config.py`. Старого Telegram-бота/API из него запускать нельзя.
 
-## Перед началом
+## 1. Проверить текущий VPS и сохранить данные
 
-Нужны:
-- VPS с Ubuntu 22.04/24.04 или совместимым Debian;
-- домен с A-записью на публичный IP VPS (либо настроенный Cloudflare Tunnel с публичным hostname);
-- доступ по SSH с правами sudo;
-- действующие новые токены Telegram и MAX, новый Bitrix24 webhook, новый секрет MAX webhook и общий `INTERNAL_AUTH_SECRET`.
+До остановки старых процессов сделайте резервную копию каталогов с SQLite-базами, очередями обращений и текущими настройками. Не перезаписывайте действующие данные.
 
-**Важно о ранее опубликованных исходниках:** в старой версии `alfadent-miniapp` в Git-истории были строки, похожие на реальные Telegram/Bitrix/proxy credentials. Считайте ранее опубликованные значения скомпрометированными и замените их в соответствующих кабинетах/сервисах. Не переносите значения из старой копии и не присылайте секреты в чат.
-
-## 1. Сохранить текущие данные
-
-До остановки старых процессов сделайте резервную копию каталогов с текущими SQLite-базами и очередями заявок. Не перезаписывайте существующую базу MAX и резервные файлы.
-
-Найдите фактическое расположение существующих баз (пути могут отличаться):
+Найдите фактическое расположение баз:
 ```bash
-sudo find /opt /var/lib -type f \( -name "auth.sqlite3" -o -name "max_bot.sqlite3" -o -name "pending_requests.json" \) -print
+sudo find /opt /var/lib -type f \\( -name "auth.sqlite3" -o -name "max_bot.sqlite3" -o -name "pending_requests.json" \\) -print
 ```
 
-После штатной остановки старых процессов и до запуска новых сервисов:
-- если найдена действующая `auth.sqlite3`, скопируйте её в `/var/lib/alfadent/auth.sqlite3` (только если целевой файл ещё не создан);
-- если найдена база MAX `max_bot.sqlite3`, скопируйте её в `/var/lib/alfadent/max/max_bot.sqlite3`;
-- если есть `pending_requests.json` у Telegram-бота, сохраните его в `/var/lib/alfadent/telegram/pending_requests.json`; если файл относится к MAX-боту, сохраните его в `/var/lib/alfadent/max/pending_requests.json`;
-- после копирования выставьте владельца `alfadent:alfadent` и проверьте наличие файлов.
-
-Пример копирования — замените `/ПОЛНЫЙ/ПУТЬ/` на каталог, который вернул `find`. Выполняйте команды только для тех файлов, которые действительно существуют:
-```bash
-sudo cp -a /ПОЛНЫЙ/ПУТЬ/auth.sqlite3 /var/lib/alfadent/auth.sqlite3
-sudo cp -a /ПОЛНЫЙ/ПУТЬ/max_bot.sqlite3 /var/lib/alfadent/max/max_bot.sqlite3
-sudo cp -a /ПОЛНЫЙ/ПУТЬ/pending_requests.json /var/lib/alfadent/telegram/pending_requests.json
-sudo chown -R alfadent:alfadent /var/lib/alfadent
-sudo chmod 600 /var/lib/alfadent/auth.sqlite3 /var/lib/alfadent/max/max_bot.sqlite3
-```
-Копируйте только реально существующие файлы; не выполняйте команды с неподтверждёнными путями. Если Render не имел постоянного диска и база не сохранилась, её невозможно восстановить из репозитория — пользователям потребуется создать/восстановить аккаунты отдельно.
-
-Старая локальная сессия MAX с одним флагом `auth=True` не считается серверной авторизацией. После перехода пользователю потребуется повторно войти по телефону и постоянному паролю, если в старой сессии не было действующего access token.
-
-Сначала проверьте текущие unit-файлы и процессы:
+Проверьте текущие службы:
 ```bash
 sudo systemctl list-units --type=service | grep -i alfadent
 sudo systemctl status alfadent-telegram alfadent-max --no-pager
 ```
-Названия могут отличаться — не останавливайте сервисы по предположению.
+Названия служб могут отличаться. Не останавливайте службы по предположению.
 
-## 2. Создать системного пользователя и каталоги
+Старые локальные флаги `auth=True` в сессиях MAX/Telegram не являются серверной авторизацией. Пользователю после перехода может потребоваться войти по телефону и постоянному паролю.
+
+## 2. Подготовить каталоги и системного пользователя
 
 ```bash
 sudo adduser --system --group --home /opt/alfadent alfadent
 sudo mkdir -p /opt/alfadent /var/lib/alfadent/telegram /var/lib/alfadent/max /etc/alfadent
 sudo chown -R alfadent:alfadent /opt/alfadent /var/lib/alfadent
-sudo chmod 750 /var/lib/alfadent
-sudo chmod 750 /etc/alfadent
+sudo chmod 750 /var/lib/alfadent /etc/alfadent
 sudo apt update
 sudo apt install -y git python3 python3-venv python3-pip nginx
 ```
 
-## 3. Получить актуальные исходники
+## 3. Получить три репозитория
 
-Приватные репозитории клонируйте по SSH-ключу, который имеет read-доступ. Не вставляйте GitHub PAT в URL команды: он попадёт в историю shell.
+Приватные репозитории клонируйте по SSH-ключу, у которого есть read-доступ. Не вставляйте GitHub PAT в URL команды.
 
 ```bash
 sudo -u alfadent git clone --branch main git@github.com:Analdin/mini-app_main.git /opt/alfadent/mini-app_main
 sudo -u alfadent git clone --branch main git@github.com:Analdin/alfa-dent_max.git /opt/alfadent/alfa-dent_max
+sudo -u alfadent git clone --branch main git@github.com:Analdin/alfadent-miniapp.git /opt/alfadent/private-config
 ```
 
-Оба PR уже объединены в основные ветки `main`; для VPS используйте `main`.
+Последний репозиторий приватный. Из него используется только `alfadent_config.py`. Не запускайте старые файлы из этого репозитория.
 
-## 4. Создать виртуальные окружения
+## 4. Установить приватную конфигурацию Python
 
-Разные окружения уменьшают риск конфликтов зависимостей:
+Скопируйте приватный модуль в закрытый каталог и подключите его к обоим проектам:
+
+```bash
+sudo install -o root -g alfadent -m 0640 \
+  /opt/alfadent/private-config/alfadent_config.py \
+  /etc/alfadent/alfadent_config.py
+
+sudo ln -s /etc/alfadent/alfadent_config.py \
+  /opt/alfadent/mini-app_main/alfadent_config.py
+
+sudo ln -s /etc/alfadent/alfadent_config.py \
+  /opt/alfadent/alfa-dent_max/max_bot/alfadent_config.py
+```
+
+Проверьте ссылки:
+```bash
+ls -l /opt/alfadent/mini-app_main/alfadent_config.py
+ls -l /opt/alfadent/alfa-dent_max/max_bot/alfadent_config.py
+sudo -u alfadent test -r /etc/alfadent/alfadent_config.py && echo "private config readable"
+```
+
+Настройки редактируются в Python-файле:
+```bash
+sudo nano /etc/alfadent/alfadent_config.py
+```
+Для смены URL Mini App после настройки собственного домена измените в этом файле `WEBAPP_URL`, `MAX_MINIAPP_LINK` и `PROMOTIONS_URL`. Не меняйте Telegram-токен, MAX-токен или Bitrix24 webhook без отдельной необходимости. Не публикуйте приватный файл.
+
+При синхронизации с GitHub обновляйте копию файла осознанно: скачайте новую версию в приватный каталог, проверьте её и только затем замените `/etc/alfadent/alfadent_config.py`. Не запускайте старый код из приватного config-репозитория.
+
+## 5. Перенести существующие базы и очереди
+
+После резервного копирования и штатной остановки старых процессов перенесите только действительно найденные файлы:
+- текущую базу авторизации `auth.sqlite3` — в `/var/lib/alfadent/auth.sqlite3`;
+- базу MAX `max_bot.sqlite3` — в `/var/lib/alfadent/max/max_bot.sqlite3`;
+- очередь Telegram `pending_requests.json` — в `/var/lib/alfadent/telegram/pending_requests.json`;
+- очередь MAX, если она существует, — в `/var/lib/alfadent/max/pending_requests.json`.
+
+Пример (замените пути на фактические, которые вернул `find`; копируйте только существующие файлы):
+```bash
+sudo cp -a /ПОЛНЫЙ/ПУТЬ/auth.sqlite3 /var/lib/alfadent/auth.sqlite3
+sudo cp -a /ПОЛНЫЙ/ПУТЬ/max_bot.sqlite3 /var/lib/alfadent/max/max_bot.sqlite3
+sudo chown -R alfadent:alfadent /var/lib/alfadent
+sudo chmod 600 /var/lib/alfadent/auth.sqlite3 /var/lib/alfadent/max/max_bot.sqlite3
+```
+
+Если Render не имел постоянного диска и база не сохранилась, восстановить её из GitHub невозможно. Не удаляйте старый Render service до проверки, есть ли там сохраняемые данные и очереди.
+
+## 6. Создать виртуальные окружения
+
 ```bash
 sudo -u alfadent python3 -m venv /opt/alfadent/venv-app
 sudo -u alfadent /opt/alfadent/venv-app/bin/pip install --upgrade pip
@@ -94,34 +122,8 @@ sudo -u alfadent /opt/alfadent/venv-max/bin/pip install --upgrade pip
 sudo -u alfadent /opt/alfadent/venv-max/bin/pip install -r /opt/alfadent/alfa-dent_max/requirements.txt
 ```
 
-## 5. Настроить секреты на VPS
+## 7. Установить systemd units
 
-Скопируйте шаблон `deploy/alfadent.env.example` в приватный файл. Значения вводите только на сервере:
-
-```bash
-sudo cp /opt/alfadent/mini-app_main/deploy/alfadent.env.example /etc/alfadent/alfadent.env
-sudo chown root:alfadent /etc/alfadent/alfadent.env
-sudo chmod 640 /etc/alfadent/alfadent.env
-sudo nano /etc/alfadent/alfadent.env
-```
-
-Задайте минимум:
-- `TELEGRAM_TOKEN` — новый токен Telegram-бота;
-- `MAX_BOT_TOKEN` — токен MAX-бота;
-- `BITRIX24_WEBHOOK` — новый webhook Bitrix24;
-- `INTERNAL_AUTH_SECRET` — длинная случайная строка, одинаковая для API и обоих ботов;
-- `MAX_WEBHOOK_SECRET` — секрет webhook MAX;
-- `WEBAPP_URL` и `MAX_MINIAPP_LINK` — один и тот же публичный HTTPS URL `https://ВАШ_ДОМЕН/miniapp.html`;
-- `PROMOTIONS_URL` — `https://ВАШ_ДОМЕН/assets/promotions.json`;
-- `TELEGRAM_PROXY` — только при необходимости, в полном формате SOCKS5/HTTPS-прокси.
-
-Для создания случайных значений непосредственно на VPS можно выполнить `openssl rand -hex 32` дважды и использовать первое значение как `INTERNAL_AUTH_SECRET`, второе как `MAX_WEBHOOK_SECRET`. Не присылайте эти значения в чат и не храните их в Git.
-
-В `AUTH_DB_PATH` используется единый файл `/var/lib/alfadent/auth.sqlite3`. Не задавайте для MAX и Telegram разные значения. Файл базы создаётся API автоматически.
-
-## 6. Установить systemd units
-
-Скопируйте unit-файлы:
 ```bash
 sudo cp /opt/alfadent/mini-app_main/deploy/alfadent-api.service /etc/systemd/system/
 sudo cp /opt/alfadent/mini-app_main/deploy/alfadent-telegram.service /etc/systemd/system/
@@ -132,31 +134,29 @@ sudo systemctl start alfadent-api
 sudo systemctl status alfadent-api --no-pager
 ```
 
-Сначала проверьте API, затем запустите ботов:
+Проверьте API до запуска ботов:
 ```bash
 curl -fsS http://127.0.0.1:8001/health
 sudo systemctl start alfadent-telegram alfadent-max
 sudo systemctl status alfadent-telegram alfadent-max --no-pager
 ```
 
-## 7. Настроить Nginx и HTTPS
+## 8. Настроить Nginx и HTTPS
 
-1. Создайте DNS A-запись домена на IP VPS.
-2. Скопируйте `deploy/nginx-bootstrap.conf` в `/etc/nginx/sites-available/alfadent`, замените `YOUR_DOMAIN` на домен, включите сайт и проверьте конфигурацию.
-3. Выпустите сертификат:
+1. Укажите DNS A-запись собственного домена на публичный IP VPS.
+2. Скопируйте `deploy/nginx-bootstrap.conf` в `/etc/nginx/sites-available/alfadent`, замените `YOUR_DOMAIN`, включите сайт и выполните `sudo nginx -t`.
+3. Выпустите HTTPS-сертификат через Certbot:
    ```bash
    sudo ln -s /etc/nginx/sites-available/alfadent /etc/nginx/sites-enabled/alfadent
    sudo nginx -t && sudo systemctl reload nginx
    sudo apt install -y certbot python3-certbot-nginx
    sudo certbot --nginx -d YOUR_DOMAIN
    ```
-4. После получения сертификата замените bootstrap-конфигурацию содержимым `deploy/nginx-https.conf`, подставьте домен и проверьте `sudo nginx -t`.
+4. После получения сертификата настройте `deploy/nginx-https.conf`, подставьте домен и проверьте `sudo nginx -t`.
 
-На Nginx 1.24 используется форма `listen 443 ssl http2;`. В конфигурации API Nginx явно удаляет входящий от внешнего клиента заголовок `X-Internal-Auth`; этот заголовок используется только локальными процессами ботов при обращении прямо к `127.0.0.1:8001`.
+Nginx проксирует `/max/` на локальный MAX webhook. В кабинете MAX укажите webhook `https://ВАШ_ДОМЕН/max/webhook`. Порт 5000 наружу не открывайте. Текущий исходник сохраняет прежнее поведение: если `MAX_WEBHOOK_SECRET` пуст, проверка заголовка MAX не требуется. Если в кабинете MAX сейчас используется секрет webhook, внесите его в приватный `alfadent_config.py` перед включением обязательной проверки.
 
-Nginx проксирует `/max/` на локальный MAX webhook. Настройте webhook в кабинете MAX на `https://ВАШ_ДОМЕН/max/webhook` и передайте секрет способом, который позволяет кабинет MAX. Приложение принимает стандартный заголовок `X-Max-Bot-Api-Secret`; секрет в URL не рекомендуется, поскольку URL может попадать в логи.
-
-## 8. Проверить
+## 9. Проверить и только потом переключить
 
 ```bash
 curl -fsS https://YOUR_DOMAIN/health
@@ -168,17 +168,17 @@ sudo journalctl -u alfadent-telegram -n 100 --no-pager
 sudo journalctl -u alfadent-max -n 100 --no-pager
 ```
 
-Тест регистрации лучше провести с отдельным тестовым номером, потому что система создаёт постоянную запись аккаунта. Проверьте: первая регистрация показывает пароль один раз; повторная регистрация предлагает войти; вход с правильным паролем работает в Mini App, Telegram и MAX; неправильный пароль отклоняется; выход отзывается на сервере; заявки передаются в Bitrix24. Убедитесь, что фактическая запись пациенту не обещается до подтверждения администратором.
+Проверьте:
+- Mini App открывается из Telegram и MAX по новому HTTPS-домену;
+- первая регистрация выдаёт постоянный пароль один раз;
+- повторный вход с тем же телефоном требует пароль;
+- сессия действует в Mini App, Telegram и MAX через общий API;
+- неправильный пароль отклоняется;
+- заявки приходят в Bitrix24;
+- администратор подтверждает фактическую запись, а приложение не обещает забронированный слот.
 
-## 9. Переключить ссылки и отключить Render
+Только после успешной проверки нового VPS меняйте ссылки Mini App и webhook MAX, затем останавливайте старые процессы и отключайте Render. Не удаляйте прежний сервис до завершения проверки данных.
 
-Когда HTTPS, Mini App, API, Telegram и MAX проверены:
-- проверьте, что Telegram-кнопка открывает `WEBAPP_URL`;
-- проверьте, что MAX-кнопка открывает `MAX_MINIAPP_LINK` внутри MAX-клиента;
-- проверьте загрузку акций по `PROMOTIONS_URL`;
-- замените webhook MAX на новый VPS URL;
-- только после успешной проверки остановите старые процессы и отключите старый Render service.
+## Важные ограничения
 
-## Обслуживание
-
-Ежедневно делайте резервную копию `/var/lib/alfadent` и храните её отдельно от VPS. В том числе сохраняйте каталог MAX `/var/lib/alfadent/max`. Не делайте публичный доступ к SQLite, `.env`, логам, резервным копиям и каталогу `data/`. После обновления выполняйте `git pull`, установку изменившихся зависимостей и перезапуск только затронутых сервисов.
+Без SMS или другого независимого фактора система не доказывает, что введённый номер принадлежит пользователю. Не открывайте таким способом медицинские документы и другие чувствительные данные. Интеграция с МИС «Инфоклиника» не подтверждена: приложение создаёт обращения/лиды в Bitrix24, но не бронирует реальное время.
