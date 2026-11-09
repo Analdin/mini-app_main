@@ -30,27 +30,29 @@ from telegram.ext import (
     MessageHandler, filters,
 )
 
-# ---------------- CONFIGURATION ----------------
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "").strip()
-BITRIX24_WEBHOOK_RAW = os.getenv('BITRIX24_WEBHOOK', '').strip().rstrip("/")
-# Render / route serves web/miniapp.html; override via WEBAPP_URL in .env if needed.
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://YOUR_DOMAIN/miniapp.html").strip()
-# SOCKS5 proxy for Telegram Bot API and getUpdates (python-telegram-bot 22.x).
-TELEGRAM_PROXY = os.getenv("TELEGRAM_PROXY", "").strip()
-BITRIX24_WEBHOOK = BITRIX24_WEBHOOK_RAW + "/" if BITRIX24_WEBHOOK_RAW else ""
+# ---------------- PRIVATE PYTHON CONFIGURATION ----------------
+# alfadent_config.py is deployed from the private config repository and is never
+# committed to this public repository.
+import alfadent_config as config
+
+TELEGRAM_TOKEN = config.TELEGRAM_TOKEN.strip()
+BITRIX24_WEBHOOK_RAW = config.BITRIX24_WEBHOOK_RAW.strip().rstrip("/")
+WEBAPP_URL = config.WEBAPP_URL.strip()
+TELEGRAM_PROXY = config.TELEGRAM_PROXY.strip()
+BITRIX24_WEBHOOK = config.BITRIX24_WEBHOOK
 ADMIN_IDS = [int(x.strip()) for x in '14000457'.split(",") if x.strip().isdigit()]
-AUTH_API_URL = os.getenv("AUTH_API_URL", "http://127.0.0.1:8001").rstrip("/")
-AUTH_API_SECRET = os.getenv("INTERNAL_AUTH_SECRET", "").strip()
+AUTH_API_URL = config.AUTH_API_URL.rstrip("/")
+AUTH_API_SECRET = config.INTERNAL_AUTH_SECRET
 CLINIC_PHONE = "+7 (988) 233-77-25"
 CLINIC_ADDRESS = "г. Сочи, ул. Северная, 12, корп. 2, 2 этаж. Ориентир: с торца здания, рядом с магазином «Коляски»."
 CLINIC_HOURS = "Ежедневно, 09:00–20:00"
 YANDEX_MAPS_URL = "https://yandex.ru/medicine/clinic/alfa_dent_1617563656"
-DATA_DIR = Path(os.getenv("BOT_DATA_DIR", "./data"))
+DATA_DIR = Path(config.TELEGRAM_DATA_DIR)
 PENDING_FILE = DATA_DIR / "pending_requests.json"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    level=config.LOG_LEVEL.upper(),
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler(), logging.FileHandler(DATA_DIR / "bot_telegram.log", encoding="utf-8")],
 )
