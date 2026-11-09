@@ -23,29 +23,29 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, unquote
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-load_dotenv()
 import bot_telegram as bot
 
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
+import alfadent_config as config
+
+logging.basicConfig(level=config.LOG_LEVEL.upper())
 log = logging.getLogger("alfadent_webapp_api")
 WEB_DIR = Path(__file__).resolve().parent / "web"
-BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", getattr(bot, "TELEGRAM_TOKEN", "")).strip()
-MAX_BOT_TOKEN = os.getenv("MAX_BOT_TOKEN", "").strip()
-INITDATA_MAX_AGE_SECONDS = int(os.getenv("INITDATA_MAX_AGE_SECONDS", "3600"))
+BOT_TOKEN = bot.TELEGRAM_TOKEN
+MAX_BOT_TOKEN = config.MAX_BOT_TOKEN.strip()
+INITDATA_MAX_AGE_SECONDS = int(config.INITDATA_MAX_AGE_SECONDS)
 
 app = FastAPI(title="АльфаДент Mini App API", docs_url=None, redoc_url=None)
 app.mount("/assets", StaticFiles(directory=WEB_DIR / "assets"), name="assets")
 
 # ---------------- SHARED PERMANENT ACCOUNT AUTH ----------------
-AUTH_DB_PATH = Path(os.getenv("AUTH_DB_PATH", str(Path(__file__).resolve().parent / "data" / "auth.sqlite3")))
+AUTH_DB_PATH = Path(config.AUTH_DB_PATH)
 AUTH_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-INTERNAL_AUTH_SECRET = os.getenv("INTERNAL_AUTH_SECRET", "")
+INTERNAL_AUTH_SECRET = config.INTERNAL_AUTH_SECRET
 PASSWORD_ITERATIONS = 310_000
 
 @contextmanager
@@ -321,7 +321,7 @@ def write_general_lead(user_id: int, name: str, phone: str, title: str, comments
         raise HTTPException(status_code=503, detail="Интеграция с CRM не настроена. Обращение сохранено локально, но не передано администратору.")
     result = bot.bitrix_call("crm.item.add", {"entityTypeId": 1, "fields": {
         "title": title[:255], "name": name or "Пациент Mini App", "comments": comments,
-        "sourceId": "WEB", "assignedById": int(os.getenv("BITRIX_ASSIGNED_BY_ID", "33")),
+        "sourceId": "WEB", "assignedById": int(config.BITRIX_ASSIGNED_BY_ID),
         "OPENED": "Y", "observers": getattr(bot, "BITRIX_ADMIN_IDS", []),
     }})
     lead_id = result.get("result", {}).get("item", {}).get("id")
@@ -413,4 +413,4 @@ def create_support(body: RequestBody):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=os.getenv("API_HOST", "127.0.0.1"), port=int(os.getenv("API_PORT", "8001")), log_level=os.getenv("LOG_LEVEL", "info").lower())
+    uvicorn.run(app, host=config.API_HOST, port=int(config.API_PORT), log_level=config.LOG_LEVEL.lower())
