@@ -8,14 +8,7 @@ import unittest
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
-# Import the API with isolated local state. No real credentials or network calls.
-_BOOTSTRAP_DIR = tempfile.TemporaryDirectory(prefix="alfadent-auth-bootstrap-")
-os.environ["AUTH_DB_PATH"] = str(Path(_BOOTSTRAP_DIR.name) / "bootstrap.sqlite3")
-os.environ["BOT_DATA_DIR"] = str(Path(_BOOTSTRAP_DIR.name) / "telegram-data")
-os.environ["TELEGRAM_TOKEN"] = "unit-test-telegram-token"
-os.environ["MAX_BOT_TOKEN"] = "unit-test-max-token"
-os.environ["INTERNAL_AUTH_SECRET"] = "unit-test-internal-secret"
-os.environ["BITRIX24_WEBHOOK"] = ""
+# CI supplies a fake alfadent_config module from tests/fixtures.
 
 from starlette.requests import Request
 from fastapi import HTTPException
