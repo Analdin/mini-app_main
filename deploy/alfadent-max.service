@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=alfadent
-Group=alfadent
+User=root
+Group=root
 WorkingDirectory=/opt/alfadent/alfa-dent_max/max_bot
 ExecStart=/opt/alfadent/venv-max/bin/python max_bot.py
 Restart=on-failure
