@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=alfadent
-Group=alfadent
+User=root
+Group=root
 WorkingDirectory=/opt/alfadent/mini-app_main
 ExecStart=/opt/alfadent/venv-app/bin/uvicorn webapp_api:app --host 127.0.0.1 --port 8001 --workers 1
 Restart=on-failure
